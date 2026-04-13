@@ -1,4 +1,4 @@
-## Pod NAT EIP Controller
+## extended-ack-extend-network-controller
 
 This controller watches Pods with the following annotations:
 
