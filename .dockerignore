@@ -1,0 +1,10 @@
+.git
+.github
+bin
+dist
+tmp
+*.log
+*.out
+coverage.out
+README*
+readme.md
