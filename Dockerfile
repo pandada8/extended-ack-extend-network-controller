@@ -1,4 +1,4 @@
-FROM golang:1.24 AS builder
+FROM golang:1.26 AS builder
 
 WORKDIR /workspace
 
@@ -9,12 +9,12 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o /workspace/bin/manager .
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM alpine:latest
+
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 WORKDIR /
 
 COPY --from=builder /workspace/bin/manager /manager
-
-USER 65532:65532
 
 ENTRYPOINT ["/manager"]

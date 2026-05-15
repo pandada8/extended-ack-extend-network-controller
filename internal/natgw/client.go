@@ -3,12 +3,11 @@ package natgw
 import (
 	"context"
 	"fmt"
-	"os"
-	"strings"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	openapimodels "github.com/alibabacloud-go/darabonba-openapi/v2/models"
 	vpc "github.com/alibabacloud-go/vpc-20160428/v7/client"
+	credentials "github.com/aliyun/credentials-go/credentials"
 )
 
 const (
@@ -52,23 +51,27 @@ type AlibabaCloudClient struct {
 	client   *vpc.Client
 }
 
+// NewAlibabaCloudClientFromEnv builds a VPC client using the Alibaba Cloud
+// default credential provider chain. It supports (in order):
+//
+//  1. Environment variables (ALIBABA_CLOUD_ACCESS_KEY_ID/SECRET[/SECURITY_TOKEN]).
+//  2. RAM role of an OIDC IdP (RRSA): ALIBABA_CLOUD_ROLE_ARN,
+//     ALIBABA_CLOUD_OIDC_PROVIDER_ARN, ALIBABA_CLOUD_OIDC_TOKEN_FILE.
+//  3. ~/.alibabacloud/credentials or aliyun-cli ~/.aliyun/config.json.
+//  4. ECS instance RAM role (ALIBABA_CLOUD_ECS_METADATA).
+//
+// Refresh and STS rotation are handled by the credentials-go provider, so the
+// returned client keeps working when temporary tokens expire.
 func NewAlibabaCloudClientFromEnv(regionID string) (*AlibabaCloudClient, error) {
-	accessKeyID := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_ID"))
-	accessKeySecret := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_ACCESS_KEY_SECRET"))
-	securityToken := strings.TrimSpace(os.Getenv("ALIBABA_CLOUD_SECURITY_TOKEN"))
-
-	if accessKeyID == "" || accessKeySecret == "" {
-		return nil, fmt.Errorf("ALIBABA_CLOUD_ACCESS_KEY_ID and ALIBABA_CLOUD_ACCESS_KEY_SECRET must be set")
+	cred, err := credentials.NewCredential(nil)
+	if err != nil {
+		return nil, fmt.Errorf("resolve alibaba cloud credential: %w", err)
 	}
 
 	config := &openapimodels.Config{}
-	config.SetAccessKeyId(accessKeyID)
-	config.SetAccessKeySecret(accessKeySecret)
+	config.SetCredential(cred)
 	config.SetRegionId(regionID)
 	config.SetEndpoint(fmt.Sprintf("vpc.%s.aliyuncs.com", regionID))
-	if securityToken != "" {
-		config.SetSecurityToken(securityToken)
-	}
 
 	cli, err := vpc.NewClient((*openapi.Config)(config))
 	if err != nil {

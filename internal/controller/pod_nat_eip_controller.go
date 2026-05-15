@@ -110,8 +110,10 @@ func (r *PodNATEIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{RequeueAfter: requeueShort}, nil
 	}
 
-	if err := r.setCondition(ctx, &pod, metav1.ConditionFalse, "EnsuringNATRule", fmt.Sprintf("ensuring NAT rule for pod IP %s on NAT gateway %s", pod.Status.PodIP, config.NATGatewayID)); err != nil {
-		return ctrl.Result{}, err
+	if !hasReadyCondition(&pod) {
+		if err := r.setCondition(ctx, &pod, metav1.ConditionFalse, "EnsuringNATRule", fmt.Sprintf("ensuring NAT rule for pod IP %s on NAT gateway %s", pod.Status.PodIP, config.NATGatewayID)); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	entry, err := r.NATClient.EnsureSNATEntry(ctx, natgw.EnsureSNATEntryRequest{
@@ -141,10 +143,13 @@ func (r *PodNATEIPReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	}
 
 	message := fmt.Sprintf("NAT rule %s routes %s via %s on %s", entry.ID, pod.Status.PodIP+"/32", config.EIP, config.NATGatewayID)
+	wasReady := hasReadyCondition(&pod)
 	if err := r.setCondition(ctx, &pod, metav1.ConditionTrue, "NATRuleReady", message); err != nil {
 		return ctrl.Result{}, err
 	}
-	r.Recorder.Event(&pod, corev1.EventTypeNormal, "NATRuleReady", message)
+	if !wasReady {
+		r.Recorder.Event(&pod, corev1.EventTypeNormal, "NATRuleReady", message)
+	}
 
 	return ctrl.Result{}, nil
 }
@@ -304,6 +309,15 @@ func snatEntryName(pod *corev1.Pod) string {
 		return name[:128]
 	}
 	return name
+}
+
+func hasReadyCondition(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == ConditionNATGatewayEgressReady {
+			return c.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 func hasManagedAnnotations(obj client.Object) bool {
